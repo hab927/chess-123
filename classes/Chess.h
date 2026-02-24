@@ -2,19 +2,9 @@
 
 #include "Game.h"
 #include "Grid.h"
+#include "Bitboard.h"
 
 constexpr int pieceSize = 80;
-
-enum ChessPiece
-{
-    NoPiece,
-    Pawn,
-    Knight,
-    Bishop,
-    Rook,
-    Queen,
-    King
-};
 
 class Chess : public Game
 {
@@ -46,4 +36,24 @@ private:
     char pieceNotation(int x, int y) const;
 
     Grid* _grid;
+    int _currentPlayer;
+
+    // bitboards
+    void setBitboards();
+    Bitboard pawns;
+    Bitboard knights;
+    Bitboard bishops;
+    Bitboard rooks;
+    Bitboard queens;
+    Bitboard kings;
+    Bitboard blackPieces;
+    Bitboard whitePieces;
+    Bitboard occupiedSquares;
+    Bitboard emptySquares;
+
+    // bitboard masks
+    uint64_t rank2;
+    uint64_t rank7;
+    uint64_t notFileA;
+    uint64_t notFileH;
 };

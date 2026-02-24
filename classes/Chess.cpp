@@ -1,6 +1,7 @@
 #include "Chess.h"
 #include <limits>
 #include <cmath>
+#include <cctype>
 
 Chess::Chess()
 {
@@ -45,8 +46,16 @@ void Chess::setUpBoard()
     _gameOptions.rowX = 8;
     _gameOptions.rowY = 8;
 
+    // make bitmasks for the pawns
+    rank2       = 0x000000000000FF00ULL;
+    rank7       = 0x00FF000000000000ULL;
+    notFileA    = 0xFEFEFEFEFEFEFEFEULL;
+    notFileH    = 0x7F7F7F7F7F7F7F7FULL;
+
     _grid->initializeChessSquares(pieceSize, "boardsquare.png");
     FENtoBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
+
+    setBitboards();
 
     startGame();
 }
@@ -77,43 +86,55 @@ void Chess::FENtoBoard(const std::string& fen) {
 
         Bit* b;
         switch (c) {
-            // lowercase = player 1, black pieces
-            case ('r'):
-                b = PieceForPlayer(1, Rook);
+            // lowercase = black pieces, 0pnbrqk
+            case ('p'):
+                b = PieceForPlayer(1, Pawn);
+                b->setGameTag(129);
                 break;
             case ('n'):
                 b = PieceForPlayer(1, Knight);
+                b->setGameTag(130);
                 break;
             case ('b'):
                 b = PieceForPlayer(1, Bishop);
+                b->setGameTag(131);
+                break;
+            case ('r'):
+                b = PieceForPlayer(1, Rook);
+                b->setGameTag(132);
                 break;
             case ('q'):
                 b = PieceForPlayer(1, Queen);
+                b->setGameTag(133);
                 break;
             case ('k'):
                 b = PieceForPlayer(1, King);
-                break;
-            case ('p'):
-                b = PieceForPlayer(1, Pawn);
+                b->setGameTag(134);
                 break;
             // upperacse = player 0, white pieces
-            case ('R'):
-                b = PieceForPlayer(0, Rook);
+            case ('P'):
+                b = PieceForPlayer(0, Pawn);
+                b->setGameTag(1);
                 break;
             case ('N'):
                 b = PieceForPlayer(0, Knight);
+                b->setGameTag(2);
                 break;
             case ('B'):
                 b = PieceForPlayer(0, Bishop);
+                b->setGameTag(3);
+                break;
+            case ('R'):
+                b = PieceForPlayer(0, Rook);
+                b->setGameTag(4);
                 break;
             case ('Q'):
                 b = PieceForPlayer(0, Queen);
+                b->setGameTag(5);
                 break;
             case ('K'):
                 b = PieceForPlayer(0, King);
-                break;
-            case ('P'):
-                b = PieceForPlayer(0, Pawn);
+                b->setGameTag(6);
                 break;
             default: 
                 std::cout << "mystery piece" << std::endl;
@@ -121,6 +142,64 @@ void Chess::FENtoBoard(const std::string& fen) {
         b->setPosition(_grid->getSquare(file,rank)->getPosition());
         _grid->getSquare(file,rank)->setBit(b);
         index++;
+    }
+}
+
+void Chess::setBitboards() {
+    std::string s = stateString();
+
+    pawns.setData(0);
+    knights.setData(0);
+    bishops.setData(0);
+    rooks.setData(0);
+    queens.setData(0);
+    kings.setData(0);
+    blackPieces.setData(0);
+    whitePieces.setData(0);
+    occupiedSquares.setData(0);
+    emptySquares.setData(0);
+
+    int count = 0; // debugging variable
+    uint64_t bitMask = (uint64_t)1; // move this through while we iterate
+    for (char c : s) {
+        count++;
+        if (c == '0') { 
+            emptySquares |= bitMask;
+            bitMask <<= 1;
+            continue;
+        }
+        switch(c) {
+            // lowercase = black pieces, 0pnbrqk
+            case 'p':
+            case 'P':
+                pawns |= bitMask;
+                break;
+            case 'n':
+            case 'N':
+                knights |= bitMask;
+                break;
+            case 'b':
+            case 'B':
+                bishops |= bitMask;
+                break;
+            case 'r':
+            case 'R':
+                rooks |= bitMask;
+                break;
+            case 'q':
+            case 'Q':
+                queens |= bitMask;
+                break;
+            case 'k':
+            case 'K':
+                kings |= bitMask;
+                break;
+            default: 
+                std::cout << "bitboard set fail at index " << count << std::endl;
+        }
+        islower(c) ? blackPieces |= bitMask : whitePieces |= bitMask;
+        occupiedSquares |= bitMask;
+        bitMask <<= 1;
     }
 }
 
@@ -140,7 +219,76 @@ bool Chess::canBitMoveFrom(Bit &bit, BitHolder &src)
 
 bool Chess::canBitMoveFromTo(Bit &bit, BitHolder &src, BitHolder &dst)
 {
-    return true;
+    ChessSquare* srcSquare = static_cast<ChessSquare*>(&src);
+    ChessSquare* dstSquare = static_cast<ChessSquare*>(&dst);
+
+    int piece = bit.gameTag();
+    if (piece > 128) {
+        piece -= 128;
+    }
+
+    int srcX = srcSquare->getColumn();
+    int srcY = srcSquare->getRow();
+
+    int dstX = dstSquare->getColumn();
+    int dstY = dstSquare->getRow();
+
+    int srcIndex = srcX + srcY*8;
+    int dstIndex = dstX + dstY*8;
+
+    int player = getCurrentPlayer()->playerNumber();
+
+    // pawn move generation
+    if (piece == Pawn) {
+        const int dir = (player == 0) ? 8 : -8;
+        const uint64_t startRank = (player == 0) ? rank2 : rank7;
+        Bitboard enemyPieces = (player == 0) ? blackPieces : whitePieces;
+
+        if (dstIndex == srcIndex + dir) {
+            return emptySquares.isOn(dstIndex); 
+        }
+
+        if (dstIndex == srcIndex + 2 * dir) {
+            bool onHomeRank = ((1ULL << srcIndex) & startRank);
+            bool pathClear = emptySquares.isOn(srcIndex + dir) && 
+                            emptySquares.isOn(dstIndex);
+            return onHomeRank && pathClear;
+        }
+
+        if (dstIndex == srcIndex - 1 + dir && (uint64_t)1 << srcIndex & notFileA) { // capture on left
+            return enemyPieces.isOn(dstIndex);
+        }
+
+        if (dstIndex == srcIndex + 1 + dir && (uint64_t)1 << srcIndex & notFileH) { // capture on right
+            return enemyPieces.isOn(dstIndex);
+        }
+    }
+
+    // king move generation
+    if (piece == King) {
+        Bitboard enemyPieces = (player == 0) ? blackPieces : whitePieces;
+        int offsets[8] = {9, 8, 7, 1, -1, -7, -8, -9};
+
+        for (int offset : offsets) {
+            if (dstIndex == srcIndex + offset) {
+                return enemyPieces.isOn(dstIndex) || emptySquares.isOn(dstIndex);
+            }
+        }
+    }
+
+    // knight move generation
+    if (piece == Knight) {
+        Bitboard enemyPieces = (player == 0) ? blackPieces : whitePieces;
+        int offsets[8] = {17, 15, 10, 6, -6, -10, -15, -17};
+
+        for (int offset : offsets) {
+            if (dstIndex == srcIndex + offset) {
+                return enemyPieces.isOn(dstIndex) || emptySquares.isOn(dstIndex);
+            }
+        }
+    }
+    
+    return false;
 }
 
 void Chess::stopGame()
@@ -170,6 +318,8 @@ Player* Chess::checkForWinner()
 
 bool Chess::checkForDraw()
 {
+    setBitboards();
+    whitePieces.printBitboard();
     return false;
 }
 
@@ -186,7 +336,8 @@ std::string Chess::stateString()
             s += pieceNotation( x, y );
         }
     );
-    return s;}
+    return s;
+}
 
 void Chess::setStateString(const std::string &s)
 {
