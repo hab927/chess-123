@@ -55,6 +55,8 @@ void Chess::setUpBoard()
     _grid->initializeChessSquares(pieceSize, "boardsquare.png");
     FENtoBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
 
+    initMagicBitboards();
+
     setBitboards();
 
     startGame();
@@ -287,6 +289,36 @@ bool Chess::canBitMoveFromTo(Bit &bit, BitHolder &src, BitHolder &dst)
             }
         }
     }
+
+    // rook move generation
+    if (piece == Rook) {
+        uint64_t attacks = getRookAttacks(srcIndex, occupiedSquares.getData());
+
+        if ((attacks >> dstIndex) & 1ULL) {
+            Bitboard enemyPieces = (player == 0) ? blackPieces : whitePieces;
+            return enemyPieces.isOn(dstIndex) || emptySquares.isOn(dstIndex);
+        }
+    }
+
+    // bishop move generation
+    if (piece == Bishop) {
+        uint64_t attacks = getBishopAttacks(srcIndex, occupiedSquares.getData());
+
+        if ((attacks >> dstIndex) & 1ULL) {
+            Bitboard enemyPieces = (player == 0) ? blackPieces : whitePieces;
+            return enemyPieces.isOn(dstIndex) || emptySquares.isOn(dstIndex);
+        }
+    }
+
+    // queen move generation
+    if (piece == Queen) {
+        uint64_t attacks = getQueenAttacks(srcIndex, occupiedSquares.getData());
+
+        if ((attacks >> dstIndex) & 1ULL) {
+            Bitboard enemyPieces = (player == 0) ? blackPieces : whitePieces;
+            return enemyPieces.isOn(dstIndex) || emptySquares.isOn(dstIndex);
+        }
+    }
     
     return false;
 }
@@ -296,6 +328,7 @@ void Chess::stopGame()
     _grid->forEachSquare([](ChessSquare* square, int x, int y) {
         square->destroyBit();
     });
+    cleanupMagicBitboards();
 }
 
 Player* Chess::ownerAt(int x, int y) const
