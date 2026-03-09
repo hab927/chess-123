@@ -17,3 +17,7 @@ So the final design came where I just used offsets and checked against empty squ
 ## Knights and Kings Movement
 
 The knights and kings followed very simply afterward, since they have offsets and only have to be checked against the empty pieces or squares occupied by enemy pieces.
+
+## Rooks, Bishops, and Queens
+
+For this assignment, I just rewatched the lectures covering Magic Bitboards. I kind of needed to remind myself how they worked again, but it was pretty much handled for me in the `MagicBitboards.h` file. Not wanting to just blindly plug in functions and have them magically work out for me, I wanted to get an understanding of the inner workings and made sure I knew what each one did first. So after that, I simply implemented it under my `canBitMoveFromTo` function, and now the moves are implemented alongside the above pieces.
