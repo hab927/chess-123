@@ -412,6 +412,8 @@ std::vector<BitMove> Chess::generateAllMoves() {
             moves.push_back({fromSquare, destSquare, Queen});
         });
     });
+
+    return moves;
 }
 
 void Chess::stopGame()
