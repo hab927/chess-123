@@ -323,6 +323,97 @@ bool Chess::canBitMoveFromTo(Bit &bit, BitHolder &src, BitHolder &dst)
     return false;
 }
 
+std::vector<BitMove> Chess::generateAllMoves() {
+    std::vector<BitMove> moves;
+    moves.reserve(32);
+
+    int player = getCurrentPlayer()->playerNumber();
+
+    // for pawns
+    const int dir = (player == 0) ? 8 : -8;
+    const uint64_t startRank = (player == 0) ? rank2 : rank7;
+    Bitboard enemyPieces = (player == 0) ? blackPieces : whitePieces;
+
+    // offsets
+    int kingOffsets[8] = {9, 8, 7, 1, -1, -7, -8, -9};
+    int knightOffsets[8] = {17, 15, 10, 6, -6, -10, -15, -17};
+
+    pawns.forEachBit([&](int fromSquare) {
+        uint64_t fromBB = (1ULL << fromSquare);
+
+        int singlePush = fromSquare + dir;
+        if (singlePush >= 0 && singlePush < 64 && emptySquares.isOn(singlePush)) {
+            moves.push_back({fromSquare, singlePush, Pawn});
+            int doublePush = fromSquare + 2 * dir;
+            if ((fromBB & startRank) && emptySquares.isOn(doublePush)) {
+                moves.push_back({fromSquare, doublePush, Pawn});
+            }
+        }
+        if (fromBB & notFileA) {
+            int capLeft = fromSquare + dir - 1;
+            if (capLeft >= 0 && capLeft < 64 && enemyPieces.isOn(capLeft)) {
+                moves.push_back({fromSquare, capLeft, Pawn});
+            }
+        }
+        if (fromBB & notFileH) {
+            int capRight = fromSquare + dir + 1;
+            if (capRight >= 0 && capRight < 64 && enemyPieces.isOn(capRight)) {
+                moves.push_back({fromSquare, capRight, Pawn});
+            }
+        }
+    });
+
+    kings.forEachBit([&](int fromSquare) {
+        Bitboard movableSquares = enemyPieces.getData() | emptySquares.getData();
+
+        for (int offset : kingOffsets) {
+            if (movableSquares.isOn(fromSquare + offset)) {
+                moves.push_back({fromSquare, fromSquare + offset, King});
+            }
+        }
+    });
+
+    knights.forEachBit([&](int fromSquare) {
+        Bitboard movableSquares = enemyPieces.getData() | emptySquares.getData();
+
+        for (int offset : knightOffsets) {
+            if (movableSquares.isOn(fromSquare + offset)) {
+                moves.push_back({fromSquare, fromSquare + offset, Knight});
+            }
+        }
+    });
+
+    rooks.forEachBit([&](int fromSquare) {
+        Bitboard movableSquares = enemyPieces.getData() | emptySquares.getData();
+        Bitboard attacks = getRookAttacks(fromSquare, occupiedSquares.getData());
+        Bitboard rookMoves = Bitboard(movableSquares.getData() & attacks.getData());
+
+        rookMoves.forEachBit([&](int destSquare) {
+            moves.push_back({fromSquare, destSquare, Rook});
+        });
+    });
+
+    bishops.forEachBit([&](int fromSquare) {
+        Bitboard movableSquares = enemyPieces.getData() | emptySquares.getData();
+        Bitboard attacks = getBishopAttacks(fromSquare, occupiedSquares.getData());
+        Bitboard rookMoves = Bitboard(movableSquares.getData() & attacks.getData());
+
+        rookMoves.forEachBit([&](int destSquare) {
+            moves.push_back({fromSquare, destSquare, Bishop});
+        });
+    });
+
+    queens.forEachBit([&](int fromSquare) {
+        Bitboard movableSquares = enemyPieces.getData() | emptySquares.getData();
+        Bitboard attacks = getQueenAttacks(fromSquare, occupiedSquares.getData());
+        Bitboard rookMoves = Bitboard(movableSquares.getData() & attacks.getData());
+
+        rookMoves.forEachBit([&](int destSquare) {
+            moves.push_back({fromSquare, destSquare, Queen});
+        });
+    });
+}
+
 void Chess::stopGame()
 {
     _grid->forEachSquare([](ChessSquare* square, int x, int y) {

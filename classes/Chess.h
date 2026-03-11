@@ -39,6 +39,8 @@ private:
     Grid* _grid;
     int _currentPlayer;
 
+    std::vector<BitMove> generateAllMoves();
+
     // bitboards
     void setBitboards();
     Bitboard pawns;
