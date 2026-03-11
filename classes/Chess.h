@@ -41,6 +41,8 @@ private:
 
     std::vector<BitMove> generateAllMoves();
 
+    void updateAI();
+
     // bitboards
     void setBitboards();
     Bitboard pawns;

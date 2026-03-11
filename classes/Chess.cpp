@@ -475,3 +475,7 @@ void Chess::setStateString(const std::string &s)
         }
     });
 }
+
+void Chess::updateAI() {
+    
+}
