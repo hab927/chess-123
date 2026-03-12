@@ -5,6 +5,8 @@
 #include "Bitboard.h"
 #include "MagicBitboards.h"
 
+using BitboardMap = std::map<std::string, Bitboard>;
+
 constexpr int pieceSize = 80;
 
 class Chess : public Game
@@ -28,6 +30,8 @@ public:
     std::string stateString() override;
     void setStateString(const std::string &s) override;
 
+    bool gameHasAI() override { return true; }
+
     Grid* getGrid() override { return _grid; }
 
 private:
@@ -40,13 +44,17 @@ private:
     int _currentPlayer;
     std::vector<BitMove> _moves;
 
-    std::vector<BitMove> generateAllMoves();
+    std::vector<BitMove> generateAllMoves(std::string state, int player);
     int negamax(std::string state, int maxDepth, int alpha, int beta, int player);
 
     void updateAI();
+    int evaluate(std::string state);
 
     // bitboards
     void setBitboards();
+    BitboardMap getBitboards(std::string s);
+    BitboardMap _gameState;
+
     Bitboard pawns;
     Bitboard knights;
     Bitboard bishops;

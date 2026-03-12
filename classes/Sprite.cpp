@@ -10,7 +10,7 @@ bool Sprite::LoadTextureFromFile(const char* filename)
     // Load from file
     int image_width = 0;
     int image_height = 0;
-    std::filesystem::path resourcePath = std::filesystem::path("resources") / filename;
+    std::filesystem::path resourcePath = std::filesystem::path("..\\chess-123\\resources") / filename;
     std::string newFilename = resourcePath.string();
     unsigned char* image_data = stbi_load(newFilename.c_str(), &image_width, &image_height, NULL, 4);
     if (image_data == NULL) {

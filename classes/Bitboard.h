@@ -69,6 +69,12 @@ class Bitboard {
     }
 
     int isOn(int index) { // helper function for seeing if a bit is on or off
+
+        // well it can't be on if it's outside
+        if (index < 0 || index >= 64) {
+            return false;
+        }
+
         return _data >> index & 1ULL;
     }
 

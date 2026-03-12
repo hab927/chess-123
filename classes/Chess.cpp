@@ -58,7 +58,11 @@ void Chess::setUpBoard()
     initMagicBitboards();
 
     setBitboards();
-    _moves = generateAllMoves();
+    _moves = generateAllMoves(stateString(), -1);
+
+    if (gameHasAI()) {
+        setAIPlayer(AI_PLAYER);
+    }
 
     startGame();
 }
@@ -148,19 +152,20 @@ void Chess::FENtoBoard(const std::string& fen) {
     }
 }
 
-void Chess::setBitboards() {
-    std::string s = stateString();
+BitboardMap Chess::getBitboards(std::string s) {
 
-    pawns.setData(0);
-    knights.setData(0);
-    bishops.setData(0);
-    rooks.setData(0);
-    queens.setData(0);
-    kings.setData(0);
-    blackPieces.setData(0);
-    whitePieces.setData(0);
-    occupiedSquares.setData(0);
-    emptySquares.setData(0);
+    std::map<std::string, Bitboard> bitboardMap;
+
+    Bitboard pawns;
+    Bitboard knights;
+    Bitboard bishops;
+    Bitboard rooks;
+    Bitboard queens;
+    Bitboard kings;
+    Bitboard blackPieces;
+    Bitboard whitePieces;
+    Bitboard occupiedSquares;
+    Bitboard emptySquares;
 
     int count = 0; // debugging variable
     uint64_t bitMask = (uint64_t)1; // move this through while we iterate
@@ -204,6 +209,33 @@ void Chess::setBitboards() {
         occupiedSquares |= bitMask;
         bitMask <<= 1;
     }
+
+    // assign each one inside of the map
+    // it's a bit clunky, but it should work!
+    bitboardMap["pawns"] = pawns;
+    bitboardMap["knights"] = knights;
+    bitboardMap["rooks"] = rooks;
+    bitboardMap["queens"] = queens;
+    bitboardMap["kings"] = kings;
+    bitboardMap["black"] = blackPieces;
+    bitboardMap["white"] = whitePieces;
+    bitboardMap["occupied"] = occupiedSquares;
+    bitboardMap["empty"] = emptySquares;
+
+    return bitboardMap;
+}
+
+void Chess::setBitboards() {  // set these inside of the internal chess class
+    BitboardMap bbm = getBitboards(stateString());
+    pawns = bbm["pawns"];
+    knights = bbm["knights"];
+    rooks = bbm["rooks"];
+    queens = bbm["queens"];
+    kings = bbm["kings"];
+    blackPieces = bbm["black"];
+    whitePieces = bbm["white"];
+    occupiedSquares = bbm["occupied"];
+    emptySquares = bbm["empty"];
 }
 
 bool Chess::actionForEmptyHolder(BitHolder &holder)
@@ -324,29 +356,32 @@ bool Chess::canBitMoveFromTo(Bit &bit, BitHolder &src, BitHolder &dst)
     return false;
 }
 
-std::vector<BitMove> Chess::generateAllMoves() {
+std::vector<BitMove> Chess::generateAllMoves(std::string state, int player) {
+
     std::vector<BitMove> moves;
     moves.reserve(32);
 
-    int player = getCurrentPlayer()->playerNumber();
+    BitboardMap bbm = getBitboards(state);
 
     // for pawns
     const int dir = (player == 0) ? 8 : -8;
     const uint64_t startRank = (player == 0) ? rank2 : rank7;
-    Bitboard enemyPieces = (player == 0) ? blackPieces : whitePieces;
+    Bitboard enemyPieces = (player == 0) ? bbm["black"] : bbm["white"];
+    Bitboard empty = bbm["empty"];
+    Bitboard occupied = bbm["occupied"];
 
     // offsets
     int kingOffsets[8] = {9, 8, 7, 1, -1, -7, -8, -9};
     int knightOffsets[8] = {17, 15, 10, 6, -6, -10, -15, -17};
 
-    pawns.forEachBit([&](int fromSquare) {
+    bbm["pawns"].forEachBit([&](int fromSquare) {
         uint64_t fromBB = (1ULL << fromSquare);
 
         int singlePush = fromSquare + dir;
-        if (singlePush >= 0 && singlePush < 64 && emptySquares.isOn(singlePush)) {
+        if (singlePush >= 0 && singlePush < 64 && empty.isOn(singlePush)) {
             moves.push_back({fromSquare, singlePush, Pawn});
             int doublePush = fromSquare + 2 * dir;
-            if ((fromBB & startRank) && emptySquares.isOn(doublePush)) {
+            if ((fromBB & startRank) && empty.isOn(doublePush)) {
                 moves.push_back({fromSquare, doublePush, Pawn});
             }
         }
@@ -364,8 +399,8 @@ std::vector<BitMove> Chess::generateAllMoves() {
         }
     });
 
-    kings.forEachBit([&](int fromSquare) {
-        Bitboard movableSquares = enemyPieces.getData() | emptySquares.getData();
+    bbm["kings"].forEachBit([&](int fromSquare) {
+        Bitboard movableSquares = enemyPieces.getData() | empty.getData();
 
         for (int offset : kingOffsets) {
             if (movableSquares.isOn(fromSquare + offset)) {
@@ -374,8 +409,8 @@ std::vector<BitMove> Chess::generateAllMoves() {
         }
     });
 
-    knights.forEachBit([&](int fromSquare) {
-        Bitboard movableSquares = enemyPieces.getData() | emptySquares.getData();
+    bbm["knights"].forEachBit([&](int fromSquare) {
+        Bitboard movableSquares = enemyPieces.getData() | empty.getData();
 
         for (int offset : knightOffsets) {
             if (movableSquares.isOn(fromSquare + offset)) {
@@ -384,33 +419,39 @@ std::vector<BitMove> Chess::generateAllMoves() {
         }
     });
 
-    rooks.forEachBit([&](int fromSquare) {
-        Bitboard movableSquares = enemyPieces.getData() | emptySquares.getData();
-        Bitboard attacks = getRookAttacks(fromSquare, occupiedSquares.getData());
+    bbm["rooks"].forEachBit([&](int fromSquare) {
+        Bitboard movableSquares = enemyPieces.getData() | empty.getData();
+        Bitboard attacks = getRookAttacks(fromSquare, occupied.getData());
         Bitboard rookMoves = Bitboard(movableSquares.getData() & attacks.getData());
 
         rookMoves.forEachBit([&](int destSquare) {
-            moves.push_back({fromSquare, destSquare, Rook});
+            if (movableSquares.isOn(destSquare)) {
+                moves.push_back({fromSquare, destSquare, Rook});
+            }
         });
     });
 
-    bishops.forEachBit([&](int fromSquare) {
-        Bitboard movableSquares = enemyPieces.getData() | emptySquares.getData();
-        Bitboard attacks = getBishopAttacks(fromSquare, occupiedSquares.getData());
-        Bitboard rookMoves = Bitboard(movableSquares.getData() & attacks.getData());
+    bbm["bishops"].forEachBit([&](int fromSquare) {
+        Bitboard movableSquares = enemyPieces.getData() | empty.getData();
+        Bitboard attacks = getBishopAttacks(fromSquare, occupied.getData());
+        Bitboard bishopMoves = Bitboard(movableSquares.getData() & attacks.getData());
 
-        rookMoves.forEachBit([&](int destSquare) {
-            moves.push_back({fromSquare, destSquare, Bishop});
+        bishopMoves.forEachBit([&](int destSquare) {
+            if (movableSquares.isOn(destSquare)) {
+                moves.push_back({fromSquare, destSquare, Bishop});
+            }
         });
     });
 
-    queens.forEachBit([&](int fromSquare) {
-        Bitboard movableSquares = enemyPieces.getData() | emptySquares.getData();
-        Bitboard attacks = getQueenAttacks(fromSquare, occupiedSquares.getData());
-        Bitboard rookMoves = Bitboard(movableSquares.getData() & attacks.getData());
+    bbm["queens"].forEachBit([&](int fromSquare) {
+        Bitboard movableSquares = enemyPieces.getData() | empty.getData();
+        Bitboard attacks = getQueenAttacks(fromSquare, occupied.getData());
+        Bitboard queenMoves = Bitboard(movableSquares.getData() & attacks.getData());
 
-        rookMoves.forEachBit([&](int destSquare) {
-            moves.push_back({fromSquare, destSquare, Queen});
+        queenMoves.forEachBit([&](int destSquare) {
+            if (movableSquares.isOn(destSquare)) {
+                moves.push_back({fromSquare, destSquare, Queen});
+            }
         });
     });
 
@@ -446,7 +487,7 @@ Player* Chess::checkForWinner()
 bool Chess::checkForDraw()
 {
     setBitboards();
-    _moves = generateAllMoves();
+    _moves = generateAllMoves(stateString(), getCurrentPlayer()->playerNumber());
     whitePieces.printBitboard();
     return false;
 }
@@ -482,53 +523,84 @@ void Chess::setStateString(const std::string &s)
 
 void Chess::updateAI() {
 
-    int maxDepth = 4;
-    char baseState[64];
+    int maxDepth = 2;
+    char baseState[65];
     int bestMoveScore = -10000000;
     BitMove bestMove;
     std::string currentState = stateString();
 
     for (BitMove move : _moves) {
-        strcpy(baseState, currentState.c_str());
+        strcpy(&baseState[0], currentState.c_str());
+        char temp = baseState[move.to];
         baseState[move.to] = baseState[move.from];
         baseState[move.from] = '0';
 
         int score = -negamax(baseState, maxDepth, -10000000, 10000000, 1);
+
         if (score > bestMoveScore) {
             bestMove = move;
             bestMoveScore = score;
         }
     }
 
-    if (bestMoveScore > -10000000) {
+    if (bestMoveScore != -10000000) {
         BitHolder& src = getHolderAt(bestMove.from & 7, bestMove.from / 8);
         BitHolder& dst = getHolderAt(bestMove.to   & 7, bestMove.to   / 8);
+        Bit* bit = src.bit();
+        dst.dropBitAtPoint(bit, ImVec2(0,0));
+        src.setBit(nullptr);
+        bitMovedFromTo(*bit, src, dst);
     }
+}
+
+int Chess::evaluate(std::string state) {
+    int score = 0;
+
+    std::map<char, int> pieceValues = {
+        {'P', 100}, {'N', 320}, {'B', 330}, {'R', 500}, {'Q', 900}, {'K', 20000},
+        {'p', -100}, {'n', -320}, {'b', -330}, {'r', -500}, {'q', -900}, {'k', -20000}
+    };
+    
+    for (char c : state) {
+        if (pieceValues.find(c) != pieceValues.end()) {
+            score += pieceValues[c];
+        }
+    }
+
+    return score;
 }
 
 int Chess::negamax(std::string state, int depth, int alpha, int beta, int playerColor) {
 
+    if (playerColor == 0) {
+        std::puts("This is not supposed to happen.");
+    }
+
     if (depth == 0) {
-        int score = Evaluate(state);
+        int score = evaluate(state);
         return playerColor * score;
     }
 
     int bestVal = -10000000;
-    char baseState[64];
+    char baseState[65];
 
-    for (BitMove move : _moves) {
-        strcpy(baseState, state.c_str());
+    std::vector<BitMove> negatedMoves = generateAllMoves(state, playerColor);
+
+    for (BitMove move : negatedMoves) {
+        strcpy(&baseState[0], state.c_str());
+        char temp = state[move.to];
         baseState[move.to] = baseState[move.from];
         baseState[move.from] = '0';
 
         int score = -negamax(baseState, depth-1, -10000000, 10000000, 1);
-        if (score > bestVal) {
-            bestMove = move;
-            bestVal = score;
+
+        state[move.from] = state[move.to];
+        state[move.to] = temp;
+
+        alpha == std::max(alpha, bestVal);
+        if (alpha >= beta) {
+            break;
         }
     }
-}
-
-int Evaluate(std::string state) {
-
+    return bestVal;
 }
