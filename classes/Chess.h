@@ -45,6 +45,7 @@ private:
     std::vector<BitMove> _moves;
 
     std::vector<BitMove> generateAllMoves(std::string state, int player);
+    std::vector<BitMove> generateLegalMoves(std::string state, int player);
     int negamax(std::string state, int maxDepth, int alpha, int beta, int player);
 
     void updateAI();

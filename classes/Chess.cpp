@@ -283,6 +283,20 @@ bool Chess::canBitMoveFromTo(Bit &bit, BitHolder &src, BitHolder &dst)
 
     int player = getCurrentPlayer()->playerNumber();
 
+    std::string testState = stateString();
+    char srcPiece = testState[srcIndex];
+    char dstPiece = testState[dstIndex];
+    
+    testState[dstIndex] = srcPiece;
+    testState[srcIndex] = '0';
+    
+    int playerSign = (player == 0) ? 1 : -1;
+    bool isLegal = !kingInCheck(testState, playerSign);
+
+    if (!isLegal) {
+        return false;
+    }
+
     // pawn move generation
     if (piece == Pawn) {
         const int dir = (player == 0) ? 8 : -8;
@@ -495,6 +509,24 @@ std::vector<BitMove> Chess::generateAllMoves(std::string state, int player) {
     return moves;
 }
 
+std::vector<BitMove> Chess::generateLegalMoves(std::string state, int player) {
+    std::vector<BitMove> pseudoLegal = generateAllMoves(state, player);
+    std::vector<BitMove> legal;
+    legal.reserve(pseudoLegal.size());
+    
+    for (BitMove move : pseudoLegal) {
+        std::string testState = state;
+        testState[move.to] = testState[move.from];
+        testState[move.from] = '0';
+        
+        if (!kingInCheck(testState, player)) {
+            legal.push_back(move);
+        }
+    }
+    
+    return legal;
+}
+
 void Chess::stopGame()
 {
     _grid->forEachSquare([](ChessSquare* square, int x, int y) {
@@ -518,13 +550,18 @@ Player* Chess::ownerAt(int x, int y) const
 
 Player* Chess::checkForWinner()
 {
+    setBitboards();
+    _moves = generateLegalMoves(stateString(), getCurrentPlayer()->playerNumber() == 0 ? 1 : -1);
+    if (_moves.size() == 0) {
+        return getCurrentPlayer()->nextPlayer();
+    }
     return nullptr;
 }
 
 bool Chess::checkForDraw()
 {
     setBitboards();
-    _moves = generateAllMoves(stateString(), getCurrentPlayer()->playerNumber() == 0 ? 1 : -1);
+    _moves = generateLegalMoves(stateString(), getCurrentPlayer()->playerNumber() == 0 ? 1 : -1);
     return false;
 }
 
@@ -565,9 +602,8 @@ void Chess::updateAI() {
     BitMove bestMove;
     std::string currentState = stateString();
 
-    // figure out which color the AI is playing and pass the appropriate sign
     int aiPlayerSign = (getCurrentPlayer()->playerNumber() == 0) ? 1 : -1;
-    std::vector<BitMove> AIMoves = generateAllMoves(currentState, aiPlayerSign);
+    std::vector<BitMove> AIMoves = generateLegalMoves(currentState, aiPlayerSign);
     
     for (BitMove move : AIMoves) {
         std::string pieceString;
@@ -624,7 +660,23 @@ int Chess::negamax(std::string state, int depth, int alpha, int beta, int player
     int bestVal = -10000000;
     char baseState[65];
 
-    std::vector<BitMove> negatedMoves = generateAllMoves(state, playerColor);
+    std::vector<BitMove> negatedMoves = generateLegalMoves(state, playerColor);
+
+    std::sort(negatedMoves.begin(), negatedMoves.end(), [&state](const BitMove& a, const BitMove& b) {
+        // incentivise capturing
+        char targetA = state[a.to];
+        char targetB = state[b.to];
+        bool isCapureA = (targetA != '0');
+        bool isCaptureB = (targetB != '0');
+        
+        if (isCapureA != isCaptureB) {
+            return isCapureA; 
+        }
+        
+        int pieceValueA = a.piece > 2 ? a.piece : 0;
+        int pieceValueB = b.piece > 2 ? b.piece : 0;
+        return pieceValueA > pieceValueB;
+    });
 
     for (BitMove move : negatedMoves) {
         strcpy(&baseState[0], state.c_str());
@@ -770,14 +822,5 @@ int Chess::evaluate(const std::string &state) {
                 break;
         }
     }
-
-    const int checkPenalty = 500000;
-    if (kingInCheck(state, 1)) {
-        score -= checkPenalty;
-    }
-    if (kingInCheck(state, -1)) {
-        score += checkPenalty;
-    }
-
     return score;
 }
