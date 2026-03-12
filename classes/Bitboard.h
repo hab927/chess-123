@@ -44,6 +44,11 @@ class Bitboard {
         }
     }
 
+    // method for finding the least significant bit (helper for king check)
+    int getIndexOfLSB() const {
+        return bitScanForward(_data);
+    }
+
     Bitboard& operator|=(const uint64_t other) {
         _data |= other;
         return *this;

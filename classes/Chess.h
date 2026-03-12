@@ -48,11 +48,12 @@ private:
     int negamax(std::string state, int maxDepth, int alpha, int beta, int player);
 
     void updateAI();
-    int evaluate(std::string state);
+    int evaluate(const std::string &state);
+    bool kingInCheck(const std::string &state, int player);
 
     // bitboards
     void setBitboards();
-    BitboardMap getBitboards(std::string s);
+    BitboardMap getBitboards(std::string s, int player);
     BitboardMap _gameState;
 
     Bitboard pawns;
