@@ -38,8 +38,10 @@ private:
 
     Grid* _grid;
     int _currentPlayer;
+    std::vector<BitMove> _moves;
 
     std::vector<BitMove> generateAllMoves();
+    int negamax(std::string state, int maxDepth, int alpha, int beta, int player);
 
     void updateAI();
 

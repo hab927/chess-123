@@ -58,6 +58,7 @@ void Chess::setUpBoard()
     initMagicBitboards();
 
     setBitboards();
+    _moves = generateAllMoves();
 
     startGame();
 }
@@ -412,6 +413,8 @@ std::vector<BitMove> Chess::generateAllMoves() {
             moves.push_back({fromSquare, destSquare, Queen});
         });
     });
+
+    return moves;
 }
 
 void Chess::stopGame()
@@ -443,6 +446,7 @@ Player* Chess::checkForWinner()
 bool Chess::checkForDraw()
 {
     setBitboards();
+    _moves = generateAllMoves();
     whitePieces.printBitboard();
     return false;
 }
@@ -477,5 +481,54 @@ void Chess::setStateString(const std::string &s)
 }
 
 void Chess::updateAI() {
-    
+
+    int maxDepth = 4;
+    char baseState[64];
+    int bestMoveScore = -10000000;
+    BitMove bestMove;
+    std::string currentState = stateString();
+
+    for (BitMove move : _moves) {
+        strcpy(baseState, currentState.c_str());
+        baseState[move.to] = baseState[move.from];
+        baseState[move.from] = '0';
+
+        int score = -negamax(baseState, maxDepth, -10000000, 10000000, 1);
+        if (score > bestMoveScore) {
+            bestMove = move;
+            bestMoveScore = score;
+        }
+    }
+
+    if (bestMoveScore > -10000000) {
+        BitHolder& src = getHolderAt(bestMove.from & 7, bestMove.from / 8);
+        BitHolder& dst = getHolderAt(bestMove.to   & 7, bestMove.to   / 8);
+    }
+}
+
+int Chess::negamax(std::string state, int depth, int alpha, int beta, int playerColor) {
+
+    if (depth == 0) {
+        int score = Evaluate(state);
+        return playerColor * score;
+    }
+
+    int bestVal = -10000000;
+    char baseState[64];
+
+    for (BitMove move : _moves) {
+        strcpy(baseState, state.c_str());
+        baseState[move.to] = baseState[move.from];
+        baseState[move.from] = '0';
+
+        int score = -negamax(baseState, depth-1, -10000000, 10000000, 1);
+        if (score > bestVal) {
+            bestMove = move;
+            bestVal = score;
+        }
+    }
+}
+
+int Evaluate(std::string state) {
+
 }
